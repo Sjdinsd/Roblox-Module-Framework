@@ -4,30 +4,39 @@ local RunService = game:GetService("RunService")
 local StarterPlayer = game:GetService("StarterPlayer")
 local StarterPlayerScripts = StarterPlayer.StarterPlayerScripts
 
-local IsServer = RunService:IsServer()
-local RootDirectory = if IsServer then ServerScriptService else Players.LocalPlayer:WaitForChild("PlayerScripts")
-local ModuleDirectory = if IsServer then RootDirectory.Services else RootDirectory:WaitForChild("Controllers")
+local isServer = RunService:IsServer()
+local rootDirectory = if isServer then ServerScriptService else Players.LocalPlayer:WaitForChild("PlayerScripts")
+local moduleDirectory = if isServer then rootDirectory.Services else rootDirectory:WaitForChild("Controllers")
 
-local function RequireModule(moduleScript: Instance)
-	if moduleScript:IsA("ModuleScript") then
-		local import = require(moduleScript)
+local modules = {}
 
-		local onStart = import.OnStart
-		if onStart then
-			onStart()
-		end
-	end
+local function RequireModule(module: ModuleScript)
+	if not module:IsA("ModuleScript") then return end
+
+	local import = require(module)
+	table.insert(modules, import)
 end
 
 return function()
-	if IsServer then
-		for _, child in ModuleDirectory:GetChildren() do
-			RequireModule(child)
+	for _, descendant: ModuleScript in moduleDirectory:GetDescendants() do
+		RequireModule(descendant)
+	end
+
+	for _, module in modules do
+		if module.setup then
+			module.setup()
 		end
-	else
-		for _, child in StarterPlayerScripts.Controllers:GetChildren() do
-			local module = ModuleDirectory:WaitForChild(child.Name)
-			RequireModule(module)
+	end
+
+	for _, module in modules do
+		if module.onStart then
+			task.spawn(module.onStart)
 		end
+	end
+
+	if not isServer then
+		moduleDirectory.DescendantAdded:Connect(function(descendant: ModuleScript)
+			RequireModule(descendant)
+		end)
 	end
 end
